@@ -1,0 +1,383 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="UTF-8">
+<title>Sistema de Estoque - Dashboard</title>
+<script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore-compat.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+<style>
+body { font-family: Arial; margin: 0; padding: 0; background-size: cover; background-position: center; background-repeat: no-repeat; transition: background-image 0.5s ease; }
+table { border-collapse: collapse; width: 100%; margin-top: 20px; }
+th, td { border: 1px solid black; padding: 8px; text-align: center; }
+button { cursor: pointer; padding: 5px 10px; margin:2px; }
+img { max-width: 100px; margin-top: 5px; }
+.login { max-width: 300px; margin: 50px auto; border:1px solid #ccc; padding: 20px; background: rgba(255,255,255,0.85); border-radius: 10px; }
+.detalhes { transition: all 0.3s ease; }
+.detalhes td { text-align: left; background: #f9f9f9; }
+.historico-table { width: 100%; border-collapse: collapse; margin-top: 5px; }
+.historico-table th, .historico-table td { border: 1px solid #999; padding: 4px; text-align: center; font-size: 0.9em; }
+</style>
+</head>
+
+<body>
+
+<div id="loginArea" class="login">
+<h3>Login</h3>
+<input id="user" placeholder="Usuário"><br><br>
+<input id="senha" type="password" placeholder="Senha"><br><br>
+<button onclick="login()">Entrar</button>
+</div>
+
+<div id="sistema" style="display:none">
+<h2>Controle de Estoque</h2>
+<p>Usuário logado: <b id="usuarioLogado"></b></p>
+<button onclick="alterarFundo()">Alterar Fundo de Tela</button><br><br>
+
+<input type="file" id="pdfInput"><br><br>
+Código: <input id="codigoScan">
+Quantidade: <input id="quantidade" value="1">
+<button onclick="retirar()">Retirar</button>
+<button onclick="adicionar()">Adicionar</button>
+<button id="filtrarCentroBtn" style="display:none;" onclick="gerarPDFCentro()">Relatório PDF por Centro de Custo</button>
+
+<table id="tabela">
+<thead>
+<tr>
+<th>Código</th>
+<th>Descrição</th>
+<th>Estoque</th>
+<th>Ações</th>
+</tr>
+</thead>
+<tbody></tbody>
+</table>
+
+<br>
+<button onclick="salvar()" style="background: #28a745; color: white; padding: 10px 20px; font-weight: bold;">SALVAR E SINCRONIZAR NA NUVEM</button>
+</div>
+
+<script>
+// --- CONFIGURAÇÃO FIREBASE ---
+const firebaseConfig = {
+    apiKey: "AIzaSyCpjtnohNiLmcBAb-zkblJN3Ct4dMgRt0U",
+    authDomain: "estoque-ab833.firebaseapp.com",
+    projectId: "estoque-ab833",
+    storageBucket: "estoque-ab833.firebasestorage.app",
+    messagingSenderId: "106574308873",
+    appId: "1:106574308873:web:3596d682627b03fbad7ad8"
+};
+
+firebase.initializeApp(firebaseConfig);
+const db = firebase.firestore();
+
+let produtos = {};
+let usuarios = {
+"richard": { senha:"123", nivel:"master", bg: "url('https://i.imgur.com/8Km9tLL.jpg')" },
+"adm": { senha:"123", nivel:"adm", bg: "url('https://i.imgur.com/3xjRkG7.jpg')" },
+"aprendiz": { senha:"123", nivel:"aprendiz", bg: "url('https://i.imgur.com/6Z8Q9sA.jpg')" }
+};
+let usuarioAtual = null;
+document.body.style.backgroundImage = "url('https://i.imgur.com/5fOqX1Z.jpg')";
+
+// --- FUNÇÃO CARREGAR DA NUVEM ---
+async function carregarDadosDaNuvem() {
+    try {
+        const doc = await db.collection("estoque").doc("principal").get();
+        if (doc.exists) {
+            produtos = doc.data().produtos || {};
+            // Opcional: usuarios = doc.data().usuarios || usuarios;
+            atualizarTabela();
+            console.log("Dados carregados da nuvem com sucesso!");
+        }
+    } catch (e) {
+        console.error("Erro ao carregar do Firebase:", e);
+    }
+}
+
+async function login() {
+    let u = document.getElementById("user").value;
+    let s = document.getElementById("senha").value;
+    if (!usuarios[u]) { alert("Usuário não existe"); return; }
+    if (usuarios[u].senha !== s) { alert("Senha incorreta"); return; }
+    
+    usuarioAtual = usuarios[u];
+    
+    // Puxa os dados do servidor ao logar
+    await carregarDadosDaNuvem();
+
+    document.body.style.backgroundImage = usuarioAtual.bg || "none";
+    document.getElementById("loginArea").style.display = "none";
+    document.getElementById("sistema").style.display = "block";
+    document.getElementById("usuarioLogado").innerText = u;
+
+    if(u === "richard" || u === "adm"){
+        document.getElementById("filtrarCentroBtn").style.display = "inline-block";
+    }
+    atualizarTabela();
+}
+
+// ---------------- Alterar fundo de tela ----------------
+function alterarFundo() {
+    let input = document.createElement("input");
+    input.type = "file";
+    input.accept = "image/*";
+    input.onchange = function(e) {
+        let file = e.target.files[0];
+        let reader = new FileReader();
+        reader.onload = function() {
+            document.body.style.backgroundImage = `url('${reader.result}')`;
+            usuarioAtual.bg = `url('${reader.result}')`;
+            localStorage.setItem("usuarios", JSON.stringify(usuarios));
+            alert("Fundo alterado localmente!");
+        };
+        reader.readAsDataURL(file);
+    };
+    input.click();
+}
+
+// ---------------- Tabela ----------------
+function atualizarTabela() {
+    let tbody = document.querySelector("#tabela tbody");
+    tbody.innerHTML = "";
+    for (let c in produtos) {
+        let p = produtos[c];
+        let tr = document.createElement("tr");
+        let botoes = "";
+        if (usuarioAtual.nivel === "master") { botoes += `<button onclick="excluirProduto('${c}')">Excluir</button>`; }
+        botoes += `<button onclick="toggleDetalhes('${c}')">...</button>`;
+        tr.innerHTML = `<td>${c}</td><td>${p.descricao}</td><td>${p.estoque}</td><td>${botoes}</td>`;
+        tbody.appendChild(tr);
+
+        let trDetalhes = document.createElement("tr");
+        trDetalhes.id = `detalhes-${c}`;
+        trDetalhes.className = "detalhes";
+        trDetalhes.style.display = "none";
+
+        let historicoHtml = "";
+        if (p.historico && p.historico.length > 0) {
+            historicoHtml = `<strong>Histórico:</strong><br><table class="historico-table"><tr><th>Tipo</th><th>Qtd</th><th>Data</th><th>Parceiro</th><th>Centro</th><th>Usuário</th><th>Valor</th><th>Ações</th></tr>`;
+            p.historico.forEach((h,i) => {
+                let editarBtn = "";
+                if(document.getElementById("usuarioLogado").innerText === "richard"){
+                    editarBtn = `<button onclick="editarHistorico('${c}',${i})">Editar</button> <button onclick="excluirHistorico('${c}',${i})">Excluir</button>`;
+                }
+                historicoHtml += `<tr><td>${h.tipo}</td><td>${h.quantidade} ${h.unidade || ''}</td><td>${h.data}</td><td>${h.parceiro}</td><td>${h.centro || ""}</td><td>${h.usuario}</td><td>${h.valor || ""}</td><td>${editarBtn}</td></tr>`;
+            });
+            historicoHtml += "</table>";
+        }
+
+        trDetalhes.innerHTML = `<td colspan="4"><strong>Info / Fornecedor:</strong> ${p.info || "Nenhuma informação"}<br>${p.foto ? `<img src="${p.foto}">` : ""}<br><strong>Centro de Custo:</strong> ${p.centro || ""}<br><strong>Unidade:</strong> ${p.unidade || "unidade"}<br><button onclick="editar('${c}')">Editar Foto / Info / Centro / Unidade</button><br>${historicoHtml}</td>`;
+        tbody.appendChild(trDetalhes);
+    }
+}
+
+function toggleDetalhes(codigo) {
+    let tr = document.getElementById(`detalhes-${codigo}`);
+    tr.style.display = tr.style.display === "none" ? "table-row" : "none";
+}
+
+function excluirProduto(c) {
+    if (!confirm("Excluir produto totalmente?")) return;
+    delete produtos[c];
+    atualizarTabela();
+}
+
+function editar(c) {
+    let p = produtos[c];
+    let info = prompt("Informações:", p.info || "");
+    if (info !== null) p.info = info;
+    let centro = prompt("Centro de Custo:", p.centro || "");
+    if (centro !== null) p.centro = centro;
+    let unidade = prompt("Unidade de medida:", p.unidade || "unidade");
+    if (unidade !== null) p.unidade = unidade;
+
+    let input = document.createElement("input");
+    input.type = "file";
+    input.accept = "image/*";
+    input.onchange = function(e) {
+        let reader = new FileReader();
+        reader.onload = function() { p.foto = reader.result; atualizarTabela(); };
+        reader.readAsDataURL(e.target.files[0]);
+    };
+    input.click();
+}
+
+// ---------------- Histórico ----------------
+function editarHistorico(codigo, index) {
+    let h = produtos[codigo].historico[index];
+    h.tipo = prompt("Tipo (entrada/saida):", h.tipo) || h.tipo;
+    h.quantidade = parseFloat(prompt("Quantidade:", h.quantidade)) || h.quantidade;
+    h.data = prompt("Data:", h.data) || h.data;
+    h.parceiro = prompt("Fornecedor/Destino:", h.parceiro) || h.parceiro;
+    h.centro = prompt("Centro de Custo:", h.centro) || h.centro;
+    h.valor = prompt("Valor:", h.valor || "") || h.valor;
+    h.unidade = prompt("Unidade:", h.unidade || "unidade") || h.unidade;
+    atualizarTabela();
+}
+
+function excluirHistorico(codigo, index) {
+    if(!confirm("Excluir esta movimentação e restaurar estoque?")) return;
+    let h = produtos[codigo].historico[index];
+    if(h.tipo === "entrada") produtos[codigo].estoque -= h.quantidade;
+    if(h.tipo === "saida") produtos[codigo].estoque += h.quantidade;
+    produtos[codigo].historico.splice(index,1);
+    atualizarTabela();
+}
+
+// ---------------- Movimentação ----------------
+function retirar() {
+    let c = document.getElementById("codigoScan").value;
+    let q = parseFloat(document.getElementById("quantidade").value);
+    if (!produtos[c]) { alert("Produto não existe"); return; }
+    if (produtos[c].estoque - q < 0) { alert("Estoque insuficiente"); return; }
+    produtos[c].estoque -= q;
+
+    let destino = prompt("Destino da retirada:") || "Desconhecido";
+    let centro = prompt("Centro de Custo para saída:") || "";
+
+    produtos[c].historico = produtos[c].historico || [];
+    produtos[c].historico.push({
+        tipo:"saida",
+        quantidade:q,
+        data:new Date().toLocaleString(),
+        parceiro:destino,
+        centro,
+        usuario: document.getElementById("usuarioLogado").innerText,
+        unidade: produtos[c].unidade || "unidade"
+    });
+    atualizarTabela();
+}
+
+function adicionar() {
+    if (usuarioAtual.nivel === "aprendiz") { alert("Sem permissão"); return; }
+    let c = document.getElementById("codigoScan").value;
+    let q = parseFloat(document.getElementById("quantidade").value);
+    if (!produtos[c]) { alert("Produto não existe"); return; }
+    produtos[c].estoque += q;
+
+    let fornecedor = prompt("Nome do fornecedor:") || "Desconhecido";
+    let centro = prompt("Centro de Custo para entrada:") || "";
+    let valor = prompt("Valor total do produto:") || "";
+    let unidade = prompt("Unidade de medida:", produtos[c].unidade || "unidade") || produtos[c].unidade;
+
+    produtos[c].historico = produtos[c].historico || [];
+    produtos[c].historico.push({
+        tipo:"entrada",
+        quantidade:q,
+        data:new Date().toLocaleString(),
+        parceiro:fornecedor,
+        centro,
+        usuario: document.getElementById("usuarioLogado").innerText,
+        valor,
+        unidade
+    });
+    atualizarTabela();
+}
+
+// ---------------- SALVAR NA NUVEM ----------------
+async function salvar() {
+    try {
+        await db.collection("estoque").doc("principal").set({
+            produtos: produtos,
+            usuarios: usuarios
+        });
+        alert("✅ Dados salvos na nuvem com sucesso! Agora todos os usuários estão sincronizados.");
+    } catch (e) {
+        alert("❌ Erro ao salvar na nuvem: " + e.message);
+    }
+}
+
+// ---------------- PDF Centro de Custo ----------------
+async function gerarPDFCentro() {
+    let centroEscolhido = prompt("Digite o centro de custo que deseja gerar relatório em PDF:");
+    if (!centroEscolhido) return;
+
+    let linhas = [];
+    for (let c in produtos) {
+        let p = produtos[c];
+        if (!p.historico) continue;
+        p.historico.forEach(h => {
+            if(h.tipo === "saida" && h.centro === centroEscolhido) {
+                linhas.push({
+                    descricao: p.descricao,
+                    quantidade: h.quantidade,
+                    data: h.data,
+                    destino: h.parceiro,
+                    usuario: h.usuario,
+                    unidade: h.unidade || "unidade"
+                });
+            }
+        });
+    }
+
+    if(linhas.length === 0){ alert("Nenhuma saída encontrada para este centro de custo."); return; }
+
+    const { jsPDF } = window.jspdf;
+    const doc = new jsPDF({ unit: 'pt', format: 'a4' });
+    const pageWidth = doc.internal.pageSize.getWidth();
+    const margin = 40;
+    const lineHeight = 16;
+    let y = margin;
+
+    doc.setFontSize(18);
+    doc.text(`Relatório de Saídas`, pageWidth/2, y, { align: 'center' });
+    y += lineHeight + 4;
+    doc.setFontSize(14);
+    doc.text(`Centro de Custo: ${centroEscolhido}`, pageWidth/2, y, { align: 'center' });
+    y += lineHeight + 10;
+
+    linhas.forEach(l => {
+        if(y > 780){ doc.addPage(); y = margin; }
+        doc.setFontSize(12);
+        doc.setTextColor(0,0,0);
+        doc.text(`Descrição: ${l.descricao}`, margin, y);
+        y += lineHeight;
+        doc.setFontSize(11);
+        doc.setTextColor(50,50,50);
+        doc.text(`Qtd: ${l.quantidade} ${l.unidade} | Destino: ${l.destino} | Data: ${l.data} | Usuário: ${l.usuario}`, margin + 20, y);
+        y += lineHeight + 4;
+    });
+
+    doc.save(`Relatorio_Saidas_${centroEscolhido}.pdf`);
+}
+
+// ---------------- Import PDF ----------------
+document.getElementById("pdfInput").addEventListener("change", async function(e) {
+    let file = e.target.files[0];
+    let reader = new FileReader();
+    reader.onload = async function() {
+        let typedarray = new Uint8Array(this.result);
+        let pdf = await pdfjsLib.getDocument(typedarray).promise;
+        let texto = "";
+        for (let i=1; i<=pdf.numPages; i++) {
+            let page = await pdf.getPage(i);
+            let content = await page.getTextContent();
+            content.items.forEach(item => { texto += item.str + " "; });
+        }
+        let codigoMatch = texto.match(/Codigo:\s*(\d+)/i);
+        let descMatch = texto.match(/Descricao:\s*(.*?)\s*UM:/i);
+        let totalMatch = texto.match(/TOTAIS\s*:\s*([\d,.]+)/i);
+        if (!codigoMatch || !totalMatch) { alert("PDF inválido"); return; }
+
+        let codigo = codigoMatch[1];
+        let descricao = descMatch ? descMatch[1] : "Produto";
+        let quantidade = parseFloat(totalMatch[1].replace(",", "."));
+        if (!produtos[codigo]) { produtos[codigo] = { descricao, estoque:0, foto:null, info:"", historico: [], centro:"", unidade:"unidade" }; }
+
+        let fornecedor = prompt(`Informe o fornecedor para o produto ${codigo}:`) || "Desconhecido";
+        let valor = prompt(`Informe o valor total do produto ${codigo}:`) || "";
+        let centro = prompt("Centro de Custo:") || "";
+        let unidade = prompt("Unidade de medida:", produtos[codigo].unidade || "unidade") || produtos[codigo].unidade;
+
+        produtos[codigo].estoque += quantidade;
+        produtos[codigo].unidade = unidade;
+        produtos[codigo].historico.push({ tipo:"entrada", quantidade, data:new Date().toLocaleString(), parceiro: fornecedor, centro, usuario: document.getElementById("usuarioLogado").innerText, valor, unidade });
+        atualizarTabela();
+    };
+    reader.readAsArrayBuffer(file);
+});
+</script>
+</body>
+</html>
