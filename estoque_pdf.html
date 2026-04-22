@@ -1,0 +1,476 @@
+<!DOCTYPE html>
+<html lang="pt-br">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>IMPACT - Estoque MAK-SM</title>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf-autotable/3.5.28/jspdf.plugin.autotable.min.js"></script>
+    <style>
+        :root { --primary-blue: #0052cc; --bg-glass: rgba(255, 255, 255, 0.95); }
+        body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; margin: 0; padding: 20px; background: #f0f2f5; }
+
+        #loginArea {
+            position: fixed; top: 0; left: 0; width: 100%; height: 100%;
+            background: url('https://images.unsplash.com/photo-1507525428034-b723cf961d3e?auto=format&fit=crop&w=1920&q=80') no-repeat center center fixed;
+            background-size: cover; display: flex; justify-content: center; align-items: center; z-index: 1000;
+        }
+        .login-card { background: var(--bg-glass); padding: 40px; border-radius: 20px; box-shadow: 0 15px 35px rgba(0,0,0,0.2); text-align: center; width: 320px; backdrop-filter: blur(10px); }
+        .login-card input { padding: 12px; border: 1px solid #ddd; border-radius: 8px; margin-bottom: 15px; width: 100%; box-sizing: border-box; }
+
+        #sistema { display:none; background: white; padding: 30px; border-radius: 12px; box-shadow: 0 2px 10px rgba(0,0,0,0.1); max-width: 1280px; margin: auto; }
+        h2 { color: var(--primary-blue); border-bottom: 2px solid var(--primary-blue); padding-bottom: 10px; margin-top: 0; }
+        .welcome-msg { font-size: 1.1em; color: #333; margin-bottom: 20px; padding: 15px; border-left: 5px solid var(--primary-blue); background: #e8f0fe; border-radius: 4px; }
+        
+        table { border-collapse: collapse; width: 100%; margin-top: 20px; }
+        th { background: #333; color: white; padding: 12px; text-transform: uppercase; font-size: 11px; }
+        td { border: 1px solid #ddd; padding: 10px; text-align: center; }
+        
+        button { padding: 10px 15px; margin: 2px; cursor: pointer; border-radius: 6px; border: none; font-weight: 500; transition: 0.2s; }
+        .btn-add { background: #28a745; color: white; }
+        .btn-out { background: #dc3545; color: white; }
+        .btn-blue { background: var(--primary-blue); color: white; }
+        .btn-vinculado { background: #8e44ad !important; color: white !important; }
+        .btn-excluir { background: #dc3545; color: white; }
+        
+        .alerta { background: #ff7675 !important; color: white !important; font-weight: bold; }
+        .xmlBox { background: #f8f9fa; border: 1px solid #ddd; padding: 20px; border-radius: 8px; margin-bottom: 20px; }
+        .input-inline { padding: 10px; border: 1px solid #ccc; border-radius: 6px; width: 180px; margin-right: 10px; }
+
+        .rosa-manual {
+            position: fixed; bottom: 30px; right: 30px; width: 80px; height: 80px;
+            background: white; border-radius: 50%; border: 2px solid #0052cc;
+            display: none; justify-content: center; align-items: center;
+            box-shadow: 0 8px 25px rgba(0,0,0,0.15); cursor: pointer; z-index: 998;
+            transition: transform 0.3s ease;
+        }
+        .rosa-manual svg { width: 55px; height: 55px; }
+        .rosa-manual:hover { transform: scale(1.1) rotate(5deg); }
+        
+        .modal-manual { display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(10, 20, 40, 0.85); z-index: 2000; justify-content: center; align-items: center; opacity: 0; transition: opacity 0.4s ease; }
+        .modal-content-manual { background: white; width: 95%; max-width: 1000px; border-radius: 24px; overflow: hidden; display: flex; flex-direction: column; }
+        .manual-body { padding: 40px; display: flex; gap: 30px; align-items: flex-start; min-height: 500px; }
+        .marelina-photo-container { width: 400px; height: 450px; flex-shrink: 0; border-radius: 20px; overflow: hidden; background: #eee; box-shadow: 0 4px 15px rgba(0,0,0,0.1); }
+        .marelina-photo-container img { width: 100%; height: 100%; object-fit: contain; }
+        .balao-fala { background: #f8fbff; padding: 30px; border-radius: 20px; border: 1px solid #e1e8f5; flex-grow: 1; height: 450px; overflow-y: auto; line-height: 1.6; font-size: 1.1em; }
+        
+        #areaPedido { display: none; background: #fff3cd; padding: 15px; border-radius: 8px; margin-bottom: 20px; border: 1px solid #ffeeba; }
+    </style>
+</head>
+<body>
+
+<div id="loginArea">
+    <div class="login-card">
+        <h2>Bem vindo</h2>
+        <p style="color:var(--primary-blue); font-weight: bold;">IMPACT - MAK-SM</p>
+        <input id="user" placeholder="Usuário">
+        <input id="senha" type="password" placeholder="Senha">
+        <button onclick="login()" class="btn-blue" style="width: 100%;">ENTRAR</button>
+    </div>
+</div>
+
+<div id="sistema">
+    <div id="welcomeBox" class="welcome-msg"></div>
+
+    <div class="xmlBox" id="boxXML" style="display:none">
+        <strong>📦 Importar Nota Fiscal (XML):</strong> 
+        <input type="file" id="xmlInput" accept=".xml">
+        <div id="xmlPreview" style="display:none; margin-top:15px;">
+            <table id="xmlTabela">
+                <thead><tr><th>Sim?</th><th>Crit?</th><th>Vinc?</th><th>Cód XML</th><th>Descrição</th><th>Qtd</th></tr></thead>
+                <tbody></tbody>
+            </table><br>
+            <button onclick="importarSelecionados()" class="btn-add">Confirmar Importação</button>
+            <button onclick="cancelarImportacao()" style="background:#666; color:white;">Cancelar</button>
+        </div>
+    </div>
+
+    <div style="background:#fff; padding:20px; border-radius:8px; border:1px solid #ddd; margin-bottom: 20px;">
+        <input id="codigoScan" class="input-inline" placeholder="Cód Produto">
+        <input id="quantidade" type="number" value="1" class="input-inline" style="width:80px">
+        <button onclick="retirar()" class="btn-out">⬇ Retirar</button>
+        <button id="btnAdicionar" onclick="adicionar()" class="btn-add" style="display:none">⬆ Adicionar</button>
+        <button id="btnRelatorio" onclick="gerarPDFCentro()" class="btn-blue" style="display:none">📄 Relatório C. Custo</button>
+        
+        <input type="file" id="inputImportRetorno" style="display:none" accept=".xml" onchange="processarXMLRetornoRapido(this)">
+        <button id="btnImportRetorno" onclick="document.getElementById('inputImportRetorno').click()" class="btn-blue" style="display:none; background:#2c3e50;">📥 Importar Retorno</button>
+        
+        <button onclick="alternarModoPedido()" id="btnCriticos" style="background:#f39c12; color:white">❗ Pouco Estoque</button>
+        <button onclick="salvarManual()" style="background:#444; color:white">💾 Salvar</button>
+    </div>
+
+    <div id="areaPedido">
+        <strong>🛒 Selecione os itens para o Pedido:</strong>
+        <button onclick="gerarPDFPedidoSelecao()" class="btn-blue" style="background:#8e44ad; margin-left: 15px;">📥 Gerar PDF de Pedido</button>
+    </div>
+
+    <input type="text" id="barraBusca" onkeyup="atualizarTabela()" placeholder="🔍 Pesquisar no estoque..." style="width:100%; padding:12px; border:2px solid var(--primary-blue); border-radius:6px; box-sizing: border-box;">
+
+    <table id="tabela">
+        <thead><tr><th id="thPedido" style="display:none;">🛒</th><th>Código</th><th>Descrição</th><th>Estoque</th><th>Unidade</th><th>Ações</th></tr></thead>
+        <tbody></tbody>
+    </table>
+</div>
+
+<div class="rosa-manual" id="btnRosa" onclick="abrirManual()">
+    <svg viewBox="0 0 64 64" fill="none" xmlns="http://www.w3.org/2000/svg">
+        <path d="M32 30C32 30 32 45 28 58" stroke="#2D8A39" stroke-width="3" stroke-linecap="round"/>
+        <path d="M29 45C29 45 22 42 18 46C22 48 29 45 29 45Z" fill="#2D8A39"/>
+        <path d="M31 38C31 38 38 35 42 39C38 41 31 38 31 38Z" fill="#2D8A39"/>
+        <circle cx="32" cy="22" r="12" fill="#0052cc"/>
+        <path d="M32 10C24 10 20 18 20 22C20 30 32 35 32 35C32 35 44 30 44 22C44 18 40 10 32 10Z" fill="#0074FF"/>
+        <circle cx="32" cy="20" r="6" fill="#003D99" fill-opacity="0.3"/>
+    </svg>
+</div>
+
+<div class="modal-manual" id="modalManual">
+    <div class="modal-content-manual">
+        <div style="background:var(--primary-blue); color:white; padding:18px 30px; display:flex; justify-content:space-between; font-weight: bold;">
+            <span>SISTEMA IMPACT</span><span style="cursor:pointer;" onclick="fecharManual()">&times;</span>
+        </div>
+        <div class="manual-body">
+            <div class="marelina-photo-container"><img id="fotoMarelina" src=""></div>
+            <div class="balao-fala"><strong>Marelina diz:</strong><br><br><div id="textoManual"></div></div>
+        </div>
+        <div style="background:#f1f3f4; padding:20px; display:flex; justify-content:space-between; align-items: center;">
+            <button onclick="alterarPagina(-1)">Voltar</button>
+            <span id="paginacao" style="font-weight: bold;"></span>
+            <button onclick="alterarPagina(1)" class="btn-blue">Próximo</button>
+        </div>
+    </div>
+</div>
+
+<script>
+let produtos = JSON.parse(localStorage.getItem("produtos")) || {};
+let usuarioAtual = null;
+let itensXML = [];
+let modoPedido = false;
+let paginaManual = 0;
+let ordemAtual = "descricao";
+
+const usuarios = {
+    richard: {senha:"Restarti08", nivel:"master", msg: "🚀 <strong>Bem Vindo ao IMPACT o estoque da Mak-SM</strong>"},
+    adm: {senha:"12345", nivel:"adm", msg: "💼 <strong>bom trabalho ADM, que o dia seja produtivo</strong>"},
+    aprendiz: {senha:"123", nivel:"aprendiz", msg: "🌱 <strong>contamos com voce</strong>"},
+    gestor: {senha:"MAKsm", nivel:"gestor", msg: "📊 <strong>Acesso restrito: Relatórios de Centro de Custo</strong>"},
+    manutencao: {senha:"richard", nivel:"manutencao", msg: "🔧 <strong>Acesso restrito: Manutenção de Produtos</strong>"}
+};
+
+const falasMarelina = [
+    "Bem-vindo ao sistema Impact.<br><br>Criado por Richard, este sistema foi desenvolvido para trazer controle, organização e clareza ao estoque.<br><br>Meu nome é Marelina, da Europa. Estou aqui a pedido de Richard para guiá-lo durante o uso do sistema.<br><br>Então… pode ficar tranquilo. Vou te mostrar tudo de forma clara e objetiva. Sem pressa. Sem confusão.<br><br>(E sem transformar coisas simples em demonstrações desnecessárias… isso fica para o Kaiser.)",
+    "Vamos ao básico. O sistema Impact controla as entradas e saídas de estoque da Mak Santa Maria. Ele responde três perguntas: Quando o produto entrou, Para onde ele foi e Quanto temos disponível.<br><br>Simples. Funcional. Necessário.<br><br>Agora o importador de XML. Ele permite inserir produtos diretamente no sistema usando arquivos XML já baixados. Durante o processo, você preenche: Fornecedor, Unidade e Produto correspondente.<br><br>Nada complexo. Mas exige atenção. Algo que a Hana faz muito bem, aliás — sempre cuidadosa, sempre precisa.",
+    "Agora um detalhe útil: o campo de “produto importante”. Não é obrigatório, mas é bastante eficiente quando utilizado.<br><br>Ao ativá-lo, você pode definir um estoque mínimo. Isso permite: Alertas de estoque baixo, Planejamento de reposição e Organização das compras.<br><br>Em outras palavras: prevenção. Algo que evita situações como “acabou tudo de repente”. (Embora certas pessoas prefiram não se importar com isso… não é, Kaiser?)",
+    "Sobre relatórios: dependendo do seu usuário, algumas funções estarão disponíveis. Isso faz parte da organização do sistema. Nem todos podem saber de certas coisas.<br><br>Um dos principais é o relatório de centro de custo. Ao abrir, o sistema pergunta: 'Qual centro de custo deseja consultar?'. Você informa… e o sistema responde.<br><br>O relatório inclui: Produtos vinculados, Movimentações e Destino dos itens. Clareza e controle. Algo que a Hana provavelmente já entendeu na primeira vez — sem precisar de explicações repetidas.",
+    "Uso direto: para retirar um produto, digite o código e clique em retirar. Se não souber o código, use a lupa de pesquisa.<br><br>“Importei um produto duplicado.” Normal. Use a opção 'Vincular produto'.<br><br>“E se eu errar?” Bom… acontece. Procure o Richard. Ele possui acesso master e pode corrigir produtos, históricos e registros. Às vezes é bom ter alguém com controle geral. Um certo nível de ego ajuda… desde que seja para resolver problemas.<br><br>Mas sugiro não chamá-lo com frequência — ele tem comportamentos parecidos com os do Kaiser.",
+    "Chegamos ao fim. Qualquer dúvida, procure o Richard. Espero que este manual tenha sido útil.<br><br>Agora preciso encerrar por aqui. Tenho a leve sensação de que o Kaiser está tentando transformar algo simples em uma exibição desnecessária novamente… e a Hana provavelmente já está tentando remediar o estrago.<br><br>Cuide bem do sistema. E use com atenção.<br><br>— Marelina"
+];
+
+function configurarCabecalhoPDF(doc, titulo) {
+    const agora = new Date().toLocaleString();
+    doc.setFontSize(18); doc.setTextColor(0, 82, 204); doc.text("IMPACT", 15, 20);
+    doc.setFontSize(10); doc.setTextColor(100); doc.text("SOLUÇÕES EM GESTÃO DE ESTOQUE | MAK-SM", 15, 27);
+    doc.setFontSize(12); doc.setTextColor(0); doc.text(titulo.toUpperCase(), 15, 38);
+    doc.setFontSize(9); doc.setTextColor(150); doc.text(`Gerado por: ${usuarioAtual.toUpperCase()} | Data: ${agora}`, 15, 45);
+    doc.setDrawColor(200); doc.line(15, 48, 195, 48);
+    return 55;
+}
+
+function login(){
+    let u = document.getElementById("user").value.toLowerCase();
+    let s = document.getElementById("senha").value;
+    if(!usuarios[u] || usuarios[u].senha !== s){ alert("Acesso Negado"); return; }
+    usuarioAtual = u;
+    let nivel = usuarios[u].nivel;
+
+    if(nivel === 'adm' || nivel === 'master') document.getElementById("boxXML").style.display = "block";
+    if(nivel === 'adm' || nivel === 'master' || nivel === 'manutencao') document.getElementById("btnAdicionar").style.display = "inline-block";
+    if(nivel === 'adm' || nivel === 'master' || nivel === 'gestor') document.getElementById("btnRelatorio").style.display = "inline-block";
+    if(u === 'richard') document.getElementById("btnImportRetorno").style.display = "inline-block";
+
+    document.getElementById("loginArea").style.display="none";
+    document.getElementById("sistema").style.display="block";
+    
+    if(nivel !== 'gestor' && nivel !== 'manutencao') document.getElementById("btnRosa").style.display="flex";
+    
+    document.getElementById("welcomeBox").innerHTML = usuarios[u].msg;
+    limpezaAutomaticaSeisMeses();
+    atualizarTabela();
+}
+
+function executarLimpezaReduzida(codigo) {
+    if (!produtos[codigo].historico) return;
+    let h = produtos[codigo].historico;
+    let entradas = h.filter(m => m.tipo === 'entrada').slice(-3);
+    let saidas = h.filter(m => m.tipo === 'saida').slice(-3);
+    let outros = h.filter(m => m.tipo !== 'entrada' && m.tipo !== 'saida').slice(-3);
+    produtos[codigo].historico = [...entradas, ...saidas, ...outros].sort((a, b) => 
+        new Date(a.data.split(',')[0].split('/').reverse().join('-')) - new Date(b.data.split(',')[0].split('/').reverse().join('-'))
+    );
+}
+
+function limpezaAutomaticaSeisMeses() {
+    let alterado = false; const seisMesesEmMS = 6 * 30 * 24 * 60 * 60 * 1000; const agora = new Date();
+    for (let c in produtos) {
+        if (produtos[c].historico && produtos[c].historico.length > 0) {
+            try {
+                let dataPrimeiro = new Date(produtos[c].historico[0].data.split(',')[0].split('/').reverse().join('-'));
+                if (agora - dataPrimeiro > seisMesesEmMS) { executarLimpezaReduzida(c); alterado = true; }
+            } catch(e) {}
+        }
+    }
+    if (alterado) salvar();
+}
+
+function atualizarTabela(){
+    let filtro = document.getElementById("barraBusca").value.toLowerCase();
+    let tbody = document.querySelector("#tabela tbody"); tbody.innerHTML = "";
+    let lista = Object.entries(produtos).map(([codigo, dados]) => ({ codigo, ...dados }));
+    
+    if(ordemAtual === "codigo") lista.sort((a,b) => a.codigo.localeCompare(b.codigo));
+    else if(ordemAtual === "estoque") lista.sort((a,b) => b.estoque - a.estoque);
+    else lista.sort((a, b) => a.descricao.localeCompare(b.descricao));
+
+    for(let p of lista){
+        if(!p.codigo.toLowerCase().includes(filtro) && !p.descricao.toLowerCase().includes(filtro)) continue;
+        let tr = document.createElement("tr");
+        let estaBaixo = (p.importante && p.estoque < p.minimo);
+        if(modoPedido && estaBaixo) tr.className = "alerta";
+        
+        let tdCheck = modoPedido ? `<td>${estaBaixo ? `<input type="checkbox" class="chk-comprar" data-cod="${p.codigo}">` : '-'}</td>` : '';
+        let acoes = `<button onclick="toggleHistorico('${p.codigo}')">Histórico</button>`;
+        
+        if(usuarios[usuarioAtual].nivel === "master" || usuarios[usuarioAtual].nivel === "manutencao") {
+            acoes += ` <button onclick="editarProduto('${p.codigo}')">⚙️</button> <button class="btn-excluir" onclick="excluirProduto('${p.codigo}')">🗑️</button>`;
+        }
+        
+        tr.innerHTML = `${tdCheck}<td>${p.codigo}</td><td>${p.descricao}</td><td>${p.estoque}</td><td>${p.unidade || "UN"}</td><td>${acoes}</td>`;
+        tbody.appendChild(tr);
+        let trH = document.createElement("tr"); trH.id = "hist-" + p.codigo; trH.style.display = "none";
+        trH.innerHTML = `<td colspan="${modoPedido ? 6 : 5}" id="content-hist-${p.codigo}"></td>`;
+        tbody.appendChild(trH);
+    }
+}
+
+function toggleHistorico(c){
+    let tr = document.getElementById("hist-"+c);
+    if(tr.style.display === "none"){
+        let p = produtos[c], html = `<table style="font-size:11px; width:100%"><tr><th>Tipo</th><th>Qtd</th><th>Data</th><th>Parceiro/CC</th><th>Usuário</th><th>Ação</th></tr>`;
+        p.historico.slice(-10).reverse().forEach((h, i) => {
+            let realIdx = p.historico.length - 1 - i;
+            let info = h.tipo === 'entrada' ? (h.parceiro || "-") : ((h.centro || "N/A") + " / " + (h.parceiro || "N/A"));
+            let btn = (usuarios[usuarioAtual].nivel === "master" || usuarios[usuarioAtual].nivel === "manutencao") ? `<button style="background:red; color:white; font-size:9px;" onclick="excluirLinhaHistorico('${c}', ${realIdx})">Desfazer</button>` : "-";
+            html += `<tr><td>${h.tipo}</td><td>${h.quantidade}</td><td>${h.data}</td><td>${info}</td><td>${h.usuario||'-'}</td><td>${btn}</td></tr>`;
+        });
+        document.getElementById("content-hist-"+c).innerHTML = html + "</table>";
+        tr.style.display = "table-row";
+    } else tr.style.display = "none";
+}
+
+function adicionar(){
+    if(usuarios[usuarioAtual].nivel === "gestor") return alert("Acesso Negado.");
+    let c = document.getElementById("codigoScan").value, q = parseFloat(document.getElementById("quantidade").value);
+    if(!c) return alert("Código vazio!"); if(isNaN(q) || q <= 0) return alert("Qtd inválida!");
+    if(!produtos[c]) {
+        let n = prompt("Nome do Produto:").toUpperCase(); if(!n) return;
+        let u = prompt("Unidade:", "UN").toUpperCase();
+        produtos[c] = { descricao: n, unidade: u, estoque: 0, importante: false, minimo: 0, historico: [] };
+    }
+    let f = prompt("Fornecedor:"); if(f === null) return;
+    produtos[c].estoque += q;
+    produtos[c].historico.push({ tipo: "entrada", quantidade: q, data: new Date().toLocaleString(), parceiro: f.toUpperCase(), usuario: usuarioAtual });
+    salvar(); atualizarTabela();
+}
+
+function retirar(){
+    if(usuarios[usuarioAtual].nivel === "gestor" || usuarios[usuarioAtual].nivel === "manutencao") return alert("Seu nível não permite movimentação.");
+    let c = document.getElementById("codigoScan").value, q = parseFloat(document.getElementById("quantidade").value);
+    if(!produtos[c]) return alert("Produto não cadastrado!"); if(produtos[c].estoque < q) return alert("Saldo insuficiente!");
+    let d = prompt("Destino:"); if(!d) return;
+    let cc = prompt("C. Custo:"); if(!cc) return;
+    produtos[c].estoque -= q;
+    produtos[c].historico.push({tipo:"saida", quantidade:q, data:new Date().toLocaleString(), centro: cc.toUpperCase(), parceiro: d.toUpperCase(), usuario: usuarioAtual});
+    salvar(); atualizarTabela();
+}
+
+document.getElementById("xmlInput").addEventListener("change", function(e){
+    let reader = new FileReader();
+    reader.onload = function(){
+        let parser = new DOMParser(); let xmlDoc = parser.parseFromString(reader.result, "text/xml");
+        let det = xmlDoc.getElementsByTagName("det"); itensXML = [];
+        let tbody = document.querySelector("#xmlTabela tbody"); tbody.innerHTML = "";
+        for(let i=0; i<det.length; i++){
+            let c = det[i].getElementsByTagName("cProd")[0].textContent;
+            let d = det[i].getElementsByTagName("xProd")[0].textContent;
+            let q = parseFloat(det[i].getElementsByTagName("qCom")[0].textContent);
+            itensXML.push({codigo:c, desc:d.toUpperCase(), qtd:q});
+            tbody.innerHTML += `<tr><td><input type="checkbox" class="chk-import" data-index="${i}" checked></td><td><input type="checkbox" class="chk-imp-xml" data-index="${i}"></td><td><button id="btn-vinc-${i}" onclick="vincularProduto(${i})">🔗</button></td><td>${c}</td><td>${d}</td><td>${q}</td></tr>`;
+        }
+        document.getElementById("xmlPreview").style.display="block";
+    };
+    reader.readAsText(e.target.files[0]);
+});
+
+function processarXMLRetornoRapido(input) {
+    if(!input.files[0]) return;
+    let reader = new FileReader();
+    reader.onload = function(){
+        let parser = new DOMParser(); let xmlDoc = parser.parseFromString(reader.result, "text/xml");
+        let itens = xmlDoc.getElementsByTagName("item"); let count = 0;
+        for(let i=0; i<itens.length; i++){
+            let c = itens[i].getElementsByTagName("codigo")[0].textContent;
+            let d = itens[i].getElementsByTagName("descricao")[0].textContent;
+            let q = parseFloat(itens[i].getElementsByTagName("quantidade")[0].textContent);
+            if(!produtos[c]) { produtos[c] = { descricao: d.toUpperCase(), estoque: 0, historico: [], unidade: "UN", importante: false, minimo: 0 }; }
+            produtos[c].estoque += q;
+            produtos[c].historico.push({ tipo: "entrada", quantidade: q, data: new Date().toLocaleString(), parceiro: "RESTAURAÇÃO BACKUP", usuario: usuarioAtual });
+            count++;
+        }
+        salvar(); atualizarTabela(); alert(`${count} itens restaurados.`); input.value = "";
+    };
+    reader.readAsText(input.files[0]);
+}
+
+function vincularProduto(i) {
+    let b = prompt("Busque código ou nome:"); if(!b) return;
+    let achados = Object.entries(produtos).filter(([c, p]) => c.includes(b) || p.descricao.includes(b.toUpperCase()));
+    if(!achados.length) return alert("Não encontrado.");
+    let sel = prompt(achados.map((p, idx) => `${idx} - ${p[0]} | ${p[1].descricao}`).join("\n"));
+    if(sel !== null && achados[sel]) { itensXML[i].vinculadoA = achados[sel][0]; document.getElementById(`btn-vinc-${i}`).classList.add("btn-vinculado"); }
+}
+
+function importarSelecionados(){
+    let f = prompt("Fornecedor?"); if(!f) return;
+    document.querySelectorAll(".chk-import:checked").forEach(c => {
+        let idx = c.dataset.index, it = itensXML[idx], cod = it.vinculadoA || it.codigo;
+        let imp = document.querySelector(`.chk-imp-xml[data-index="${idx}"]`).checked;
+        let min = 0; if(imp) min = parseFloat(prompt(`Mínimo para: ${it.desc}`, "5")) || 0;
+        if(!produtos[cod]) { produtos[cod] = { descricao: it.desc, estoque: 0, historico: [], unidade: "UN", importante: imp, minimo: min }; }
+        else { produtos[cod].importante = imp; if(imp) produtos[cod].minimo = min; }
+        produtos[cod].estoque += it.qtd;
+        produtos[cod].historico.push({ tipo: "entrada", quantidade: it.qtd, data: new Date().toLocaleString(), parceiro: f.toUpperCase(), usuario: usuarioAtual });
+    });
+    salvar(); atualizarTabela(); document.getElementById("xmlPreview").style.display="none";
+}
+
+function gerarPDFPedidoSelecao() {
+    const { jsPDF } = window.jspdf; const doc = new jsPDF(); let selecionados = [];
+    document.querySelectorAll(".chk-comprar:checked").forEach(chk => {
+        let p = produtos[chk.dataset.cod];
+        selecionados.push([chk.dataset.cod, p.descricao, `${p.estoque} ${p.unidade}`, `${p.minimo} ${p.unidade}`]);
+    });
+    if(!selecionados.length) return alert("Selecione os itens!");
+    let startY = configurarCabecalhoPDF(doc, "PEDIDO DE COMPRA");
+    doc.autoTable({ startY: startY, head: [['CÓDIGO', 'DESCRIÇÃO', 'SALDO ATUAL', 'MÍNIMO']], body: selecionados, theme: 'striped', headStyles: { fillColor: [51, 51, 51] } });
+    doc.save("Pedido_Compra_IMPACT.pdf");
+}
+
+function gerarPDFCentro() {
+    let centro = prompt("Centro de Custo:"); if(!centro) return;
+    const { jsPDF } = window.jspdf; const doc = new jsPDF(); let dados = [];
+    for(let c in produtos) {
+        produtos[c].historico.forEach(h => { 
+            if(h.tipo === "saida" && h.centro && h.centro.toUpperCase() === centro.toUpperCase()) {
+                dados.push([h.data.split(',')[0], produtos[c].descricao, `${h.quantidade} ${produtos[c].unidade || 'UN'}`, h.parceiro, h.usuario || 'N/A']); 
+            }
+        });
+    }
+    if(!dados.length) return alert("Nada encontrado.");
+    let startY = configurarCabecalhoPDF(doc, `SAÍDAS: ${centro}`);
+    doc.autoTable({ startY: startY, head: [['DATA', 'PRODUTO', 'QTD', 'DESTINO', 'OPERADOR']], body: dados, theme: 'striped', headStyles: { fillColor: [51, 51, 51] } });
+    doc.save(`Relatorio_CC_${centro}.pdf`);
+}
+
+window.addEventListener('keydown', function(e) {
+    if (e.altKey && (e.key === 'r' || e.key === 'R')) {
+        e.preventDefault(); let cmd = prompt("Comando:").toLowerCase();
+        
+        if(cmd === 'douglas') { 
+            alert("☕ Douglas diz: 'Já tomou café hoje?'"); 
+            let opt = prompt("1-Desc | 2-Cód | 3-Estoque");
+            ordemAtual = (opt==="2") ? "codigo" : (opt==="3") ? "estoque" : "descricao"; 
+            atualizarTabela(); 
+        }
+        else if(cmd === 'julia') {
+            alert("📊 Julia diz: 'Aqui estão as últimas 10 alterações para auditoria.'");
+            const { jsPDF } = window.jspdf; const doc = new jsPDF(); let logs = [];
+            for (let c in produtos) produtos[c].historico.forEach(h => logs.push([h.data, h.usuario || "S/U", h.tipo.toUpperCase(), produtos[c].descricao]));
+            logs.sort((a,b) => new Date(b[0].split('/').reverse().join('-')) - new Date(a[0].split('/').reverse().join('-')));
+            let startY = configurarCabecalhoPDF(doc, "AUDITORIA (ÚLTIMAS 10)");
+            doc.autoTable({ startY: startY, head: [['DATA', 'USUÁRIO', 'AÇÃO', 'PRODUTO']], body: logs.slice(0, 10), theme: 'grid' });
+            doc.save("Auditoria_IMPACT.pdf");
+        }
+        else if(cmd === 'daniela') {
+            alert("📁 Daniela diz: 'Backups organizados são a alma do sistema!'");
+            let acao = prompt("1-PDF Estoque | 2-XML Backup");
+            if(acao === "1") {
+                const { jsPDF } = window.jspdf; const doc = new jsPDF();
+                let dados = Object.entries(produtos).map(([c, p]) => [c, p.descricao, `${p.estoque} ${p.unidade}`]);
+                let startY = configurarCabecalhoPDF(doc, "INVENTÁRIO GERAL");
+                doc.autoTable({ startY: startY, head: [['CÓDIGO', 'DESCRIÇÃO', 'SALDO TOTAL']], body: dados, theme: 'striped' });
+                doc.save("Inventario_IMPACT.pdf");
+            } else if(acao === "2") {
+                let xml = '<?xml version="1.0" encoding="UTF-8"?><estoque>';
+                for(let c in produtos) xml += `<item><codigo>${c}</codigo><descricao>${produtos[c].descricao}</descricao><quantidade>${produtos[c].estoque}</quantidade></item>`;
+                let blob = new Blob([xml + '</estoque>'], { type: 'text/xml' });
+                let link = document.createElement('a'); link.href = URL.createObjectURL(blob); link.download = "backup.xml"; link.click();
+            }
+        }
+        else if(cmd === 'henrique') {
+            alert("🚚 Henrique diz: 'Cuidando das entradas para ninguém ficar sem material.'");
+            const { jsPDF } = window.jspdf; const doc = new jsPDF(); let dados = [];
+            for(let c in produtos) produtos[c].historico.filter(h => h.tipo === "entrada").forEach(ent => dados.push([ent.parceiro, ent.data, produtos[c].descricao, ent.quantidade]));
+            let startY = configurarCabecalhoPDF(doc, "COMPRAS");
+            doc.autoTable({ startY: startY, head: [['FORNECEDOR', 'DATA', 'PRODUTO', 'QTD']], body: dados, theme: 'striped' });
+            doc.save("Compras_IMPACT.pdf");
+        }
+        else if(cmd === 'jesse') {
+            if(confirm("⚠️ Jesse pergunta: 'Tem certeza que quer zerar tudo? Não tem volta!'")) { 
+                produtos = {}; salvar(); atualizarTabela(); 
+            }
+        }
+        else if(cmd === 'analisse') { 
+            alert("🧹 Analisse diz: 'Limpando o excesso para o sistema rodar leve.'");
+            for (let c in produtos) executarLimpezaReduzida(c); salvar(); atualizarTabela(); 
+        }
+    }
+});
+
+function editarProduto(cOld){
+    let p = produtos[cOld]; let novoNome = prompt("Nome:", p.descricao); if(novoNome === null) return;
+    p.descricao = novoNome.toUpperCase(); let novoCodigo = prompt("Código:", cOld); if(novoCodigo === null) return;
+    let respImp = prompt("Crítico? (S/N)", p.importante ? "S" : "N"); if(respImp !== null) p.importante = (respImp.toUpperCase() === "S");
+    if(p.importante) p.minimo = parseFloat(prompt("Mínimo:", p.minimo)) || 0; else p.minimo = 0;
+    let novaUn = prompt("Unidade:", p.unidade || "UN"); if(novaUn !== null) p.unidade = novaUn.toUpperCase();
+    let novoSaldo = prompt("Saldo Real:", p.estoque);
+    if(novoSaldo !== null) {
+        let nS = parseFloat(novoSaldo);
+        if(!isNaN(nS) && nS !== p.estoque) {
+            p.historico.push({tipo:"ajuste", quantidade:(nS - p.estoque), data:new Date().toLocaleString(), parceiro:"AJUSTE MANUAL", usuario:usuarioAtual});
+            p.estoque = nS;
+        }
+    }
+    if(novoCodigo !== cOld) { if(produtos[novoCodigo]) alert("Código já existe!"); else { produtos[novoCodigo] = p; delete produtos[cOld]; } }
+    salvar(); atualizarTabela();
+}
+
+function excluirLinhaHistorico(c, idx) {
+    if(confirm("Desfazer movimentação?")) {
+        let mov = produtos[c].historico[idx];
+        if(mov.tipo === "entrada") produtos[c].estoque -= mov.quantidade;
+        else if(mov.tipo === "saida") produtos[c].estoque += mov.quantidade;
+        produtos[c].historico.splice(idx, 1); salvar(); atualizarTabela();
+    }
+}
+
+function salvar(){ localStorage.setItem("produtos", JSON.stringify(produtos)); }
+function salvarManual(){ salvar(); alert("Salvo!"); }
+function excluirProduto(c) { if(confirm("Excluir item?")) { delete produtos[c]; salvar(); atualizarTabela(); } }
+function alternarModoPedido() { modoPedido = !modoPedido; document.getElementById("thPedido").style.display = modoPedido ? "table-cell" : "none"; document.getElementById("areaPedido").style.display = modoPedido ? "block" : "none"; atualizarTabela(); }
+function abrirManual() { paginaManual = 0; renderManual(); document.getElementById("modalManual").style.display = "flex"; setTimeout(() => document.getElementById("modalManual").style.opacity = "1", 50); }
+function fecharManual() { let m = document.getElementById("modalManual"); m.style.opacity = "0"; setTimeout(() => m.style.display = "none", 300); }
+function renderManual() { document.getElementById("textoManual").innerHTML = falasMarelina[paginaManual]; document.getElementById("fotoMarelina").src = (paginaManual + 1) + 'x.jpeg'; document.getElementById("paginacao").innerText = `PASSO ${paginaManual + 1} DE 6`; }
+function alterarPagina(delta) { paginaManual += delta; if (paginaManual > 5) fecharManual(); else if (paginaManual < 0) paginaManual = 0; else renderManual(); }
+function cancelarImportacao() { document.getElementById("xmlPreview").style.display = "none"; }
+</script>
+</body>
+</html>
